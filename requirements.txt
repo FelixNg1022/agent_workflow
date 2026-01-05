@@ -1,0 +1,20 @@
+# LangGraph AI Agent Workflow
+# Influencer Outreach Agent (送拍Agent框架)
+
+langgraph>=0.2.0
+langchain>=0.3.0
+langchain-core>=0.3.0
+
+# For future LLM integration
+langchain-openai>=0.2.0
+langchain-anthropic>=0.2.0
+
+# Visualization (optional)
+pygraphviz>=1.11  # For graph visualization
+
+# Async support
+asyncio-compat>=0.1.0
+
+# Utilities
+python-dotenv>=1.0.0
+pydantic>=2.0.0
