@@ -5,6 +5,7 @@ Each method handles a specific stage and generates an outgoing message.
 """
 
 from mcnagent.langgraph.state import State, WorkflowStage
+from .greetings import get_greeting
 
 
 class PR_Nodes:
@@ -42,8 +43,10 @@ class PR_Nodes:
         """
         print("👋 [greet_stage] Sending greeting message...")
         
-        # TODO: Generate personalized greeting using LLM
-        outgoing_message = "您好！我们对您的内容非常感兴趣，想与您洽谈合作事宜。请问方便分享您的社交平台链接吗？"
+        greeting = get_greeting("greet")
+        # TODO: Replace with LLM-generated content
+        llm_content = "我们对您的内容非常感兴趣，想与您洽谈合作事宜。请问方便分享您的社交平台链接吗？"
+        outgoing_message = f"{greeting}\n\n{llm_content}"
         
         return {
             "pending_response": None,  # Clear for new response
@@ -63,8 +66,10 @@ class PR_Nodes:
         """
         print("📝 [type_stage] Confirming collaboration terms...")
         
-        # TODO: Parse previous response and generate terms confirmation
-        outgoing_message = "感谢您的回复！请确认以下合作条件：\n1. 合作类型：单推/合集/纯佣\n2. 报价范围\n3. 商品类型：寄拍/送拍/报单"
+        greeting = get_greeting("type")
+        # TODO: Replace with LLM-generated content
+        llm_content = "请确认以下合作条件：\n1. 合作类型：单推/合集/纯佣\n2. 报价范围\n3. 商品类型：寄拍/送拍/报单"
+        outgoing_message = f"{greeting}\n\n{llm_content}"
         
         return {
             "pending_response": None,
@@ -82,8 +87,10 @@ class PR_Nodes:
         """
         print("📄 [brief_stage] Sending campaign brief...")
         
-        # TODO: Generate and attach brief document
-        outgoing_message = "请查阅附件中的活动Brief，如有任何问题请随时提出。确认无误后我们将继续下一步。"
+        greeting = get_greeting("brief")
+        # TODO: Replace with LLM-generated content
+        llm_content = "请查阅附件中的活动Brief，如有任何问题请随时提出。确认无误后我们将继续下一步。"
+        outgoing_message = f"{greeting}\n\n{llm_content}"
         
         return {
             "pending_response": None,
@@ -101,7 +108,10 @@ class PR_Nodes:
         """
         print("📅 [schedule_stage] Confirming availability...")
         
-        outgoing_message = "请问您方便的档期是什么时候？我们会根据您的时间安排进行对接。"
+        greeting = get_greeting("schedule")
+        # TODO: Replace with LLM-generated content
+        llm_content = "请问您方便的档期是什么时候？我们会根据您的时间安排进行对接。"
+        outgoing_message = f"{greeting}\n\n{llm_content}"
         
         return {
             "pending_response": None,
@@ -118,8 +128,10 @@ class PR_Nodes:
         """
         print("🛍️ [product_stage] Processing product selection...")
         
-        # TODO: Attach product catalog or options
-        outgoing_message = "请从以下产品中选择您想要推广的商品，如有疑问请告知。"
+        greeting = get_greeting("product")
+        # TODO: Replace with LLM-generated content
+        llm_content = "请从以下产品中选择您想要推广的商品，如有疑问请告知。"
+        outgoing_message = f"{greeting}\n\n{llm_content}"
         
         return {
             "pending_response": None,
@@ -137,7 +149,10 @@ class PR_Nodes:
         """
         print("📍 [address_stage] Collecting shipping address...")
         
-        outgoing_message = "请提供您的收货地址，我们会尽快安排产品寄送并提供物流跟踪信息。"
+        greeting = get_greeting("address")
+        # TODO: Replace with LLM-generated content
+        llm_content = "请提供您的收货地址，我们会尽快安排产品寄送并提供物流跟踪信息。"
+        outgoing_message = f"{greeting}\n\n{llm_content}"
         
         return {
             "pending_response": None,
@@ -155,7 +170,10 @@ class PR_Nodes:
         """
         print("🔔 [reminder_stage] Sending receipt reminder...")
         
-        outgoing_message = "您好！产品已寄出，请注意查收。收到后请确认，我们会继续对接后续事宜。"
+        greeting = get_greeting("reminder")
+        # TODO: Replace with LLM-generated content
+        llm_content = "产品已寄出，请注意查收。收到后请确认，我们会继续对接后续事宜。"
+        outgoing_message = f"{greeting}\n\n{llm_content}"
         
         return {
             "pending_response": None,
@@ -173,7 +191,10 @@ class PR_Nodes:
         """
         print("📝 [script_reminder_stage] Sending content script reminder...")
         
-        outgoing_message = "请按照Brief中的脚本指南进行内容创作，如有需要修改的地方请与我们沟通。发布时间请按照约定档期。"
+        greeting = get_greeting("script_reminder")
+        # TODO: Replace with LLM-generated content
+        llm_content = "请按照Brief中的脚本指南进行内容创作，如有需要修改的地方请与我们沟通。发布时间请按照约定档期。"
+        outgoing_message = f"{greeting}\n\n{llm_content}"
         
         return {
             "pending_response": None,
@@ -190,7 +211,10 @@ class PR_Nodes:
         """
         print("✅ [final_stage] Sending completion message...")
         
-        outgoing_message = "感谢您的合作！如有后续合作机会，我们会再次联系您。祝一切顺利！"
+        greeting = get_greeting("final")
+        # TODO: Replace with LLM-generated content
+        llm_content = "感谢您的合作！如有后续合作机会，我们会再次联系您。祝一切顺利！"
+        outgoing_message = f"{greeting}\n\n{llm_content}"
         
         return {
             "pending_response": None,
