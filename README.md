@@ -1,6 +1,6 @@
 # Influencer Outreach Agent (送拍Agent框架)
 
-A modular, tree-structured LangGraph workflow for influencer/KOL collaboration outreach. Built following production patterns with proper separation of concerns.
+A modular, loop-based LangGraph workflow for influencer/KOL collaboration outreach. Built following production patterns with proper separation of concerns.
 
 ## Project Structure
 
@@ -10,20 +10,21 @@ agent_workflow/
 │   ├── __init__.py
 │   └── langgraph/
 │       ├── __init__.py
-│       ├── state.py                   # State definitions
+│       ├── state.py                   # State definitions & WorkflowStage enum
 │       └── nodes/
 │           ├── __init__.py
 │           ├── pr_nodes/              # PR/Outreach nodes
 │           │   ├── __init__.py
-│           │   └── pr_nodes.py        # PR_Nodes class
+│           │   ├── pr_nodes.py        # PR_Nodes class (stage handlers)
+│           │   └── greetings.py       # Greeting message pools (10 per stage)
 │           └── other_nodes/           # Utility nodes
 │               ├── __init__.py
 │               ├── initialization.py
-│               └── nodes.py           # decoder, kol_response_test, etc.
+│               └── nodes.py           # stage_processor, decoder, response_check, etc.
 ├── config/
 │   ├── __init__.py
 │   └── settings.py                    # Configuration management
-├── graph.py                           # Graph construction
+├── graph.py                           # Graph construction (loop-based)
 ├── main.py                            # Entry point
 ├── visualize_workflow.py              # Visualization utilities
 ├── requirements.txt
@@ -57,80 +58,188 @@ python visualize_workflow.py
 
 ## Architecture
 
+### Loop-Based Stage Processing
+
+The workflow uses a **loop-based architecture** where each stage follows the same processing pattern:
+
+```
+                                    START
+                                      │
+                                      ▼
+                            ┌─────────────────┐
+                            │  initialization │
+                            └────────┬────────┘
+                                     │
+              ┌──────────────────────┴──────────────────────┐
+              │                                              │
+              │    ╔════════════════════════════════════╗   │
+              │    ║     STAGE PROCESSING LOOP          ║   │
+              │    ╚════════════════════════════════════╝   │
+              │                                              │
+              │         ┌─────────────────────┐             │
+              │         │   stage_processor   │◄────────────┼───┐
+              │         │   (基本流程节点)     │             │   │
+              │         └──────────┬──────────┘             │   │
+              │                    │                        │   │
+              │                    ▼                        │   │
+              │         ┌─────────────────────┐             │   │
+              │         │     decorator       │             │   │
+              │         │   (回复内容打磨)     │             │   │
+              │         └──────────┬──────────┘             │   │
+              │                    │                        │   │
+              │                    ▼                        │   │
+              │         ┌─────────────────────┐             │   │
+              │         │   await_response    │             │   │
+              │         │    (等待回复)        │             │   │
+              │         └──────────┬──────────┘             │   │
+              │                    │                        │   │
+              │                    ▼                        │   │
+              │         ┌─────────────────────┐             │   │
+              │         │      decoder        │             │   │
+              │         │    (解码节点)        │             │   │
+              │         └──────────┬──────────┘             │   │
+              │                    │                        │   │
+              │                    ▼                        │   │
+              │         ┌─────────────────────┐             │   │
+              │         │   response_check    │             │   │
+              │         │   (回复检查节点)     │             │   │
+              │         └──────────┬──────────┘             │   │
+              │                    │                        │   │
+              │       ┌────────────┼────────────┐           │   │
+              │       ▼            ▼            ▼           │   │
+              │   continue    question     escalation       │   │
+              │       │       handler       (博主⭐)        │   │
+              │       │           │            │            │   │
+              │       │           └────────────┘            │   │
+              │       │                  │                  │   │
+              │       ▼                  ▼                  │   │
+              │   ┌─────────────────────────────┐           │   │
+              │   │       advance_stage         │           │   │
+              │   │       (推进阶段)             │           │   │
+              │   └──────────────┬──────────────┘           │   │
+              │                  │                          │   │
+              │         ┌───────┴───────┐                   │   │
+              │         ▼               ▼                   │   │
+              │    more stages    all complete              │   │
+              │         │               │                   │   │
+              │         └───────────────┼───────────────────┘   │
+              │                         │                       │
+              └─────────────────────────┼───────────────────────┘
+                                        │
+                                        ▼
+                                       END
+```
+
+### Workflow Stages
+
+The workflow progresses through 9 sequential stages:
+
+| Index | Stage | Chinese | Description |
+|-------|-------|---------|-------------|
+| 0 | `greet` | 打招呼 | Send greeting, request social links |
+| 1 | `type` | 确认类型 | Confirm collaboration terms (单推/合集/纯佣) |
+| 2 | `brief` | 发送Brief | Send campaign brief for review |
+| 3 | `schedule` | 确认档期 | Confirm influencer availability |
+| 4 | `product` | 选品 | Handle product selection |
+| 5 | `address` | 收集地址 | Collect shipping address |
+| 6 | `reminder` | 提醒收货 | Send delivery reminders |
+| 7 | `script_reminder` | 脚本提醒 | Send content guidelines |
+| 8 | `final` | 完成消息 | Send completion notification |
+
 ### Key Components
 
 | Component | Description |
 |-----------|-------------|
-| `PR_Nodes` | Class-based node organization for main outreach flow |
-| `State` | TypedDict-based state management with helper functions |
-| `decoder` | Parses and structures influencer responses |
-| `kol_response_test` | Validates KOL/influencer response quality |
-| `determination` | Classifies response intent (accept/decline/question) |
-| `decorator` | Polishes and enhances AI-generated responses |
+| `stage_processor` | Routes to appropriate PR_Node handler based on current stage |
+| `PR_Nodes` | Class containing stage-specific handlers (greet_stage, type_stage, etc.) |
+| `decorator` | Polishes outgoing messages before sending |
+| `await_response` | Waits for and captures KOL response |
+| `decoder` | Parses response into structured format with intent detection |
+| `response_check` | Determines routing: continue, question_handler, or human_escalation |
+| `advance_stage` | Moves to next stage or ends workflow |
 
-### Workflow Flow
+### Greeting Message System
 
+Each stage has a pool of **10 greeting messages** that are randomly selected to add variety to outreach:
+
+```python
+# greetings.py structure
+GREET_GREETINGS = ["Greeting 1", "Greeting 2", ...]  # 10 greetings
+TYPE_GREETINGS = [...]
+# ... one pool per stage
+
+def get_greeting(stage: str) -> str:
+    """Returns a random greeting for the specified stage."""
 ```
-START
-  │
-  ▼
-initialization ──► email_greet_run ──► determination_or_decorator
-                                              │
-                               ┌──────────────┴──────────────┐
-                               ▼                             ▼
-                        determination ──────────────► decorator
-                                                          │
-                                                          ▼
-                                                  kol_response_test
-                                                          │
-                    ┌─────────────────────────────────────┘
-                    ▼
-             type_run ──► brief_run ──► decoder ──► determination
-                                                          │
-                    ┌─────────────────┬───────────────────┤
-                    ▼                 ▼                   ▼
-             schedule_run    question_handler    human_escalation
-                    │                 │                   │
-                    └─────────────────┴───────────────────┘
-                                      │
-             schedule_run ──► product_run ──► address_run ──► reminder_run
-                                                                    │
-                                                                    ▼
-                                              script_reminder_run ──► final_message_run
-                                                                              │
-                                                                              ▼
-                                                                             END
+
+Message format: `[Random Greeting] + [LLM-generated content]`
+
+```python
+# Usage in PR_Nodes
+greeting = get_greeting("greet")
+llm_content = call_llm(...)  # TODO: LLM integration
+outgoing_message = f"{greeting}\n\n{llm_content}"
 ```
 
 ## Node Descriptions
 
-### Initialization
-| Node | Chinese | Description |
-|------|---------|-------------|
-| `initialization` | 初始化 | Setup database, fetch influencer data |
+### Processing Nodes
 
-### PR_Nodes (Main Flow)
 | Node | Chinese | Description |
 |------|---------|-------------|
-| `email_greet_run` | 打招呼 | Send greeting, request social links |
-| `type_run` | 确认类型 | Confirm collaboration terms |
-| `brief_run` | 发送Brief | Send campaign brief |
-| `schedule_run` | 确认档期 | Confirm availability |
-| `product_run` | 选品 | Handle product selection |
-| `address_run` | 收集地址 | Collect shipping address |
-| `reminder_run` | 提醒收货 | Send delivery reminders |
-| `script_reminder_run` | 脚本提醒 | Send content guidelines |
-| `final_message_run` | 完成消息 | Send completion notification |
+| `initialization` | 初始化 | Setup, fetch influencer data |
+| `stage_processor` | 基本流程节点 | Execute current stage's PR_Node handler |
+| `decorator` | 回复内容打磨 | Polish and enhance outgoing messages |
+| `await_response` | 等待回复 | Wait for KOL response (WeChat integration point) |
+| `decoder` | 解码节点 | Parse response, detect intent & sentiment |
+| `response_check` | 回复检查节点 | Analyze response and determine routing |
+| `advance_stage` | 推进阶段 | Move to next stage or complete workflow |
 
-### Response Handling
+### Branching Nodes
+
 | Node | Chinese | Description |
 |------|---------|-------------|
-| `decoder` | 解码器 | Parse response into structured format |
-| `kol_response_test` | KOL回复测试 | Validate response quality |
-| `determination` | 判断 | Classify response intent |
-| `decorator` | 装饰器 | Polish AI responses |
-| `question_handler` | 问题处理 | Handle influencer questions |
-| `human_escalation` | 人工介入 | Escalate to human operator |
+| `question_handler` | 问题处理 | Auto-answer influencer questions from knowledge base |
+| `human_escalation` | 人工介入 (博主⭐) | Escalate to human operator for complex issues |
+
+## State Schema
+
+```python
+class State(TypedDict):
+    # Influencer data
+    influencer_info: Optional[InfluencerInfo]
+    
+    # Stage tracking (loop-based)
+    current_stage: str              # Current WorkflowStage value
+    current_stage_index: int        # Index in STAGE_ORDER (0-8)
+    stage_completed: bool           # Whether current stage action is done
+    
+    # Workflow tracking
+    messages: Annotated[list[str], operator.add]
+    
+    # Collaboration details
+    collaboration_type: Optional[str]   # 单推/合集/纯佣
+    price_range: Optional[str]
+    product_type: Optional[str]         # 寄拍/送拍/报单
+    
+    # Response handling
+    pending_response: Optional[str]     # Raw KOL response
+    polished_response: Optional[str]    # Decorated outgoing message
+    decoded_response: Optional[dict]    # Parsed response with entities
+    kol_intent: Optional[str]           # accept, decline, question, negotiate, unclear
+    response_type: Optional[str]        # continue, question, escalation
+    
+    # Flags
+    has_questions: bool
+    needs_human_review: bool
+    workflow_complete: bool
+    
+    # Stage confirmations
+    schedule_confirmed: bool
+    address_collected: bool
+    product_selected: bool
+    shipping_address: Optional[str]
+```
 
 ## Configuration
 
@@ -157,96 +266,102 @@ print(settings.is_production())  # False
 
 ## How to Extend
 
-### 1. Add LLM to a Node
+### 1. Add Real Greetings
+
+Edit `mcnagent/langgraph/nodes/pr_nodes/greetings.py`:
+
+```python
+GREET_GREETINGS = [
+    "您好！👋 很高兴能联系到您！",
+    "Hi~ 我是来自XX品牌的对接人！",
+    "您好呀！关注您很久了！",
+    # ... add 10 real greetings per stage
+]
+```
+
+### 2. Integrate LLM
+
+Replace placeholder content in `PR_Nodes` methods:
 
 ```python
 from langchain_openai import ChatOpenAI
 
 llm = ChatOpenAI(model="gpt-4")
 
-class PR_Nodes:
-    @staticmethod
-    def email_greet_run(state: State) -> State:
-        influencer = state.get("influencer_info", {})
-        
-        prompt = f"Generate a greeting for {influencer.get('nickname')}"
-        response = llm.invoke(prompt)
-        
-        return {
-            **state,
-            "pending_response": response.content,
-            "messages": ["Greeting generated"],
-        }
+@staticmethod
+def greet_stage(state: State) -> dict:
+    greeting = get_greeting("greet")
+    
+    influencer = state.get("influencer_info", {})
+    prompt = f"Generate a personalized request for social links for {influencer.get('nickname')}"
+    llm_content = llm.invoke(prompt).content
+    
+    outgoing_message = f"{greeting}\n\n{llm_content}"
+    
+    return {
+        "polished_response": outgoing_message,
+        "stage_completed": True,
+        ...
+    }
 ```
 
-### 2. Add a New Node
+### 3. Add a New Stage
 
 ```python
-# 1. Add to mcnagent/langgraph/nodes/pr_nodes/pr_nodes.py
-class PR_Nodes:
-    @staticmethod
-    def custom_run(state: State) -> State:
-        # Your logic here
-        return {**state, "custom_field": "value"}
+# 1. Add to WorkflowStage enum in state.py
+class WorkflowStage(str, Enum):
+    ...
+    CUSTOM = "custom"
 
-# 2. Register in graph.py
-graph_builder.add_node("custom_run", PR_Nodes.custom_run)
-graph_builder.add_edge("previous_node", "custom_run")
+# 2. Add to STAGE_ORDER in state.py
+STAGE_ORDER = [..., WorkflowStage.CUSTOM, ...]
+
+# 3. Add greetings pool in greetings.py
+CUSTOM_GREETINGS = ["...", ...]
+GREETINGS_MAP["custom"] = CUSTOM_GREETINGS
+
+# 4. Add handler in PR_Nodes
+@staticmethod
+def custom_stage(state: State) -> dict:
+    greeting = get_greeting("custom")
+    ...
+
+# 5. Register in PR_Nodes.get_handler()
+handlers = {
+    ...
+    WorkflowStage.CUSTOM.value: cls.custom_stage,
+}
 ```
 
-### 3. Add Conditional Branching
+### 4. Integrate WeChat API
+
+The `await_response` node is the integration point for messaging platforms:
 
 ```python
-def route_custom(state: State) -> Literal["option_a", "option_b"]:
-    if state.get("some_condition"):
-        return "option_a"
-    return "option_b"
-
-graph_builder.add_conditional_edges(
-    "source_node",
-    route_custom,
-    {"option_a": "node_a", "option_b": "node_b"}
-)
-```
-
-## State Schema
-
-```python
-class State(TypedDict):
-    # Influencer data
-    influencer_info: Optional[InfluencerInfo]
+def await_response(state: State) -> dict:
+    # Send message via WeChat
+    wechat_api.send_message(
+        to=state["influencer_info"]["contact_info"],
+        message=state["polished_response"]
+    )
     
-    # Workflow tracking
-    current_stage: str
-    messages: list[str]
+    # Wait for response (webhook or polling)
+    response = wechat_api.wait_for_reply(timeout=3600)
     
-    # Collaboration details
-    collaboration_type: Optional[str]
-    price_range: Optional[str]
-    product_type: Optional[str]
-    
-    # Response handling
-    pending_response: Optional[str]
-    polished_response: Optional[str]
-    decoded_response: Optional[dict]
-    
-    # KOL testing
-    kol_response_valid: bool
-    kol_intent: Optional[str]
-    
-    # Flow control
-    has_questions: bool
-    needs_human_review: bool
-    workflow_complete: bool
+    return {
+        "pending_response": response,
+        ...
+    }
 ```
 
 ## Next Steps
 
-1. **Add LLM Integration** - Connect OpenAI/Anthropic for response generation
-2. **Database Setup** - Connect to influencer database
-3. **Message Queue** - Integrate with WeChat/messaging platforms
-4. **Web Backend** - Add API endpoints (see reference: `server.py`)
-5. **Monitoring** - Add logging and observability
+1. **Fill Greeting Pools** - Replace placeholders with real Chinese greetings
+2. **Add LLM Integration** - Connect OpenAI/Anthropic for content generation
+3. **WeChat Integration** - Connect messaging platform in `await_response`
+4. **Database Setup** - Connect to influencer database
+5. **Human Escalation UI** - Build operator dashboard for escalated cases
+6. **Monitoring** - Add logging and observability
 
 ## License
 
